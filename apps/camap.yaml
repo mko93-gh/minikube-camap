@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/CAMAP-APP/minikube-camap.git    # <= MODIFIER POUR POINTER VERS VOTRE REPO
+    repoURL: https://github.com/mko-gh/minikube-camap.git    # <= MODIFIER POUR POINTER VERS VOTRE REPO
     targetRevision: refs/heads/main
     path: deployments/camap
   destination:
