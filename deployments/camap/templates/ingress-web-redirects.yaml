@@ -1,0 +1,58 @@
+{{- if and .Values.ingress.enabled .Values.ingress.web.enabled }}
+{{- $full := include "camap.fullname" . -}}
+{{- $host := .Values.ingress.web.host -}}
+{{- $class := .Values.ingress.className -}}
+
+{{- if .Values.ingress.web.redirects.cgu }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $full }}-web-redirect-cgu
+  labels:
+    {{- include "camap.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/ingress.class: {{ $class | quote }}
+    nginx.ingress.kubernetes.io/permanent-redirect: {{ .Values.ingress.web.redirects.cgu | quote }}
+    nginx.ingress.kubernetes.io/permanent-redirect-code: "301"
+spec:
+  ingressClassName: {{ $class | quote }}
+  rules:
+    - host: {{ $host }}
+      http:
+        paths:
+          - path: /cgu
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $full }}-web
+                port:
+                  number: 80
+---
+{{- end }}
+
+{{- if .Values.ingress.web.redirects.privacy }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $full }}-web-redirect-privacypolicy
+  labels:
+    {{- include "camap.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/ingress.class: {{ $class | quote }}
+    nginx.ingress.kubernetes.io/permanent-redirect: {{ .Values.ingress.web.redirects.privacy | quote }}
+    nginx.ingress.kubernetes.io/permanent-redirect-code: "301"
+spec:
+  ingressClassName: {{ $class | quote }}
+  rules:
+    - host: {{ $host }}
+      http:
+        paths:
+          - path: /privacypolicy
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $full }}-web
+                port:
+                  number: 80
+{{- end }}
+{{- end }}

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "camap.fullname" . }}-config
+  labels:
+    {{- include "camap.labels" . | nindent 4 }}
+data:
+  my.cnf: |
+{{ .Values.mysql.config.myCnf | indent 4 }}
+
+  camapts.env.tpl: |
+{{ .Files.Get "files/camapts.env.tpl" | indent 4 }}
+
+  camaphx-config.xml.tpl: |
+{{ .Files.Get "files/camaphx-config.xml.tpl" | indent 4 }}

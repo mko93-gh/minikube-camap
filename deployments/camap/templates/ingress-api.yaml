@@ -1,0 +1,45 @@
+{{- if and .Values.ingress.enabled .Values.ingress.api.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "camap.fullname" . }}-api
+  labels:
+    {{- include "camap.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/ingress.class: {{ .Values.ingress.className | quote }}
+    nginx.ingress.kubernetes.io/proxy-body-size: {{ .Values.ingress.bodySize | quote }}
+    nginx.ingress.kubernetes.io/proxy-read-timeout: {{ .Values.ingress.timeouts.read | quote }}
+    nginx.ingress.kubernetes.io/proxy-send-timeout: {{ .Values.ingress.timeouts.send | quote }}
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: {{ .Values.ingress.timeouts.connect | quote }}
+    nginx.ingress.kubernetes.io/ssl-redirect: {{ .Values.ingress.api.tls.enabled | toString | quote }}
+    {{- $snippet := include "camap.ingress.apiServerSnippet" . | trim }}
+    {{- if $snippet }}
+    nginx.ingress.kubernetes.io/server-snippet: |
+      {{- $snippet | nindent 6 }}
+    {{- end }}
+    {{- if .Values.ingress.api.tls.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.api.tls.clusterIssuer | quote }}
+    {{- end }}
+    {{- if and (not .Values.ingress.api.tls.clusterIssuer) .Values.ingress.api.tls.issuer }}
+    cert-manager.io/issuer: {{ .Values.ingress.api.tls.issuer | quote }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  {{- if .Values.ingress.api.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.api.host }}
+      secretName: {{ include "camap.tlsSecretNameApi" . }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.api.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "camap.fullname" . }}-api
+                port:
+                  number: 3010
+{{- end }}

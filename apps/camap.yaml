@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: camap
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/CAMAP-APP/minikube-camap.git    # <= MODIFIER POUR POINTER VERS VOTRE REPO
+    targetRevision: refs/heads/main
+    path: deployments/camap
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: camap
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

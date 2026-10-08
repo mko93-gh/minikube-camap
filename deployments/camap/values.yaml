@@ -1,0 +1,241 @@
+image:
+  api:
+    repository: ghcr.io/camap-app/camap-ts
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  web:
+    repository: ghcr.io/camap-app/camap-hx
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  mysql:
+    repository: mysql
+    tag: "8.0"
+    pullPolicy: IfNotPresent
+
+mysql:
+  enabled: true
+
+  # Secret existant fourni par SealedSecret
+  # Contient les clés:
+  # - mysql-root-password
+  # - mysql-database
+  # - mysql-username
+  # - mysql-password
+  existingSecret: camap-mysql
+
+  storage:
+    size: 2Gi
+    storageClassName: "standard"
+
+  config:
+    myCnf: |
+      [mysqld]
+      max_allowed_packet=100M
+      # we don't want STRICT_TRANS_TABLES as it causes a lot of problems with record-macros.
+      # https://github.com/HaxeFoundation/record-macros/issues/23
+      sql-mode='ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'
+      # default in 8 is:
+      # sql-mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'
+
+      collation-server = utf8mb4_unicode_ci
+      character-set-server = utf8mb4
+
+      # in dev mode, you might want to open the database to host by allowing connection from anywhere.
+      # in production, keep the line commented to prevent database exposure.
+      # bind-address=0.0.0.0
+
+      default-authentication-plugin=mysql_native_password
+      log-error-verbosity=1
+      skip-log-bin
+
+# Secret runtime existant
+# Contient au minimum:
+# - CAMAP_KEY
+# - JWT_ACCESS_TOKEN_SECRET
+# - JWT_REFRESH_TOKEN_SECRET
+# - SMTP_AUTH_USER
+# - SMTP_AUTH_PASS
+runtimeSecrets:
+  existingSecret: camap-runtime
+
+certificates:
+  enabled: false
+
+hostAliases: []
+
+camapConfig:
+  # ---- paramètres non sensibles utilisés pour le rendu des templates ----
+
+  # API / front / bridge
+  dbHost: camap-mysql
+  dbPort: "3306"
+
+  # Mailpit in-cluster, pas de TLS sur SMTP en local
+  smtpHost: mailpit.mailpit.svc.cluster.local
+  smtpPort: "1025"
+  smtpSecure: "false"
+  smtpIgnoreTls: "true"
+  smtpTlsServername: ""
+
+  camapHost: "http://camap.local"
+  # camapHost: "camap.local"
+  camapLocalHost: "http://camap-web"
+  camapBridgeApi: "http://api.camap.local"
+  camapBridgeApiInternal: "http://camap-api:3010"
+  # camapApiUrl: "http://api.camap.local"
+  camapApiUrl: "http://camap-api:3010"
+
+  hxTriggerCrons: "true"
+  themeId: "default"
+
+  disableBruteForce: "true"
+
+  # nodeEnv: [test|development|production]
+  nodeEnv: "development"
+
+  # CAMAP HX
+  hostname: "camap.local"
+  instanceName: "camap"
+  webmasterEmail: "admin@camap.local"
+
+  debug: "1"
+  cache: "0"
+
+  # Mapbox: clé publique pk.*, donc peut rester hors secret
+  mapboxKey: "pk.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+resources:
+  api:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  web:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  mysql:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+ingress:
+  enabled: true
+  className: nginx
+
+  bodySize: 15m
+
+  timeouts:
+    read: 30
+    send: 15
+    connect: 15
+
+  denyCidrs: []
+
+  api:
+    enabled: true
+    host: api.camap.local
+    tls:
+      enabled: false
+      clusterIssuer: ""
+      issuer: ""
+      secretName: ""
+
+  web:
+    enabled: true
+    replicaCount: 1
+    host: camap.local
+    tls:
+      enabled: false
+      clusterIssuer: ""
+      issuer: ""
+      secretName: ""
+    redirects:
+      cgu: "http://127.0.0.1/cgu"
+      privacy: "http://127.0.0.1/rgpd"
+    security:
+      blockInstall: false
+
+autoscaling:
+  web:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 4
+
+    memory:
+      type: AverageValue
+      averageValue: 800Mi
+
+    behavior:
+      scaleUp:
+        stabilizationWindowSeconds: 0
+        selectPolicy: Max
+        policies:
+          - type: Percent
+            value: 100
+            periodSeconds: 30
+          - type: Pods
+            value: 2
+            periodSeconds: 30
+
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        selectPolicy: Min
+        policies:
+          - type: Pods
+            value: 1
+            periodSeconds: 120
+
+api:
+  replicaCount: 1
+
+web:
+  # utilisé seulement si autoscaling.web.enabled = false
+  replicaCount: 1
+  pdb:
+    minAvailable: 0
+
+  apacheOverlay:
+    enabled: true
+    camapStaticConf: |
+      # apache/camap-static.conf - overlay K8s
+
+      ProxyPreserveHost On
+      ProxyTimeout 60
+
+      # env.js généré par entrypoint (local, no-cache)
+      Alias /env.js "/srv/www/env.js"
+      <Files "/srv/www/env.js">
+        Require all granted
+        AddType application/javascript .js
+        Header set Cache-Control "no-store, must-revalidate"
+        Header set Pragma "no-cache"
+      </Files>
+
+      # Les bundles front sont servis par camap-ts sous /neostatic
+      ProxyPass        /neostatic/ http://camap-api:3010/neostatic/
+      ProxyPassReverse /neostatic/ http://camap-api:3010/neostatic/
+
+      # API GraphQL
+      ProxyPass        /graphql http://camap-api:3010/graphql
+      ProxyPassReverse /graphql http://camap-api:3010/graphql
+
+      # Locales i18n
+      ProxyPass        /locales/ http://camap-api:3010/locales/
+      ProxyPassReverse /locales/ http://camap-api:3010/locales/
+
+      # API REST
+      # ProxyPass        /api/ http://camap-api:3010/api/
+      # ProxyPassReverse /api/ http://camap-api:3010/api/

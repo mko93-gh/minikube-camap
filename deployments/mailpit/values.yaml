@@ -1,0 +1,30 @@
+mailpit:
+  replicaCount: 1
+  image:
+    repository: axllent/mailpit
+    tag: v1.30.2
+    pullPolicy: IfNotPresent
+
+  service:
+    smtpPort: 1025
+    httpPort: 80
+
+  config:
+    maxAge: 5d
+    maxMessages: 999
+
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+      ephemeral-storage: 128Mi
+    limits:
+      memory: 256Mi
+      cpu: 500m
+      ephemeral-storage: 512Mi
+
+ingress:
+  enabled: true
+  className: nginx
+  host: mailpit.local
+  proxyBufferSize: 32k

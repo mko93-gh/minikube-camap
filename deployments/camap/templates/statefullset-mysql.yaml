@@ -1,0 +1,105 @@
+{{- if .Values.mysql.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "camap.fullname" . }}-mysql
+  labels:
+    {{- include "camap.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ include "camap.name" . }}
+    app.kubernetes.io/component: mysql
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "camap.fullname" . }}-mysql
+  labels:
+    {{- include "camap.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "camap.fullname" . }}-mysql
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "camap.name" . }}
+      app.kubernetes.io/component: mysql
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "camap.name" . }}
+        app.kubernetes.io/component: mysql
+    spec:
+      containers:
+        - name: mysql
+          image: "{{ .Values.image.mysql.repository }}:{{ .Values.image.mysql.tag }}"
+          imagePullPolicy: {{ .Values.image.mysql.pullPolicy }}
+          args: ["mysqld", "--default-authentication-plugin=mysql_native_password"]
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mysql.existingSecret | default (printf "%s-mysql" (include "camap.fullname" .)) }}
+                  key: mysql-root-password
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mysql.existingSecret | default (printf "%s-mysql" (include "camap.fullname" .)) }}
+                  key: mysql-database
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mysql.existingSecret | default (printf "%s-mysql" (include "camap.fullname" .)) }}
+                  key: mysql-username
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                  secretKeyRef:
+                    name: {{ .Values.mysql.existingSecret | default (printf "%s-mysql" (include "camap.fullname" .)) }}
+                    key: mysql-password
+            - name: TZ
+              value: "Europe/Paris"
+          ports:
+            - containerPort: 3306
+              name: mysql
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            - name: config
+              mountPath: /etc/mysql/conf.d/my.cnf
+              subPath: my.cnf
+          readinessProbe:
+            tcpSocket:
+              port: 3306
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 3306
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources.mysql | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "camap.fullname" . }}-config
+            items:
+              - key: my.cnf
+                path: my.cnf
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.mysql.storage.size | quote }}
+        {{- if .Values.mysql.storage.storageClassName }}
+        storageClassName: {{ .Values.mysql.storage.storageClassName | quote }}
+        {{- end }}
+{{- end }}

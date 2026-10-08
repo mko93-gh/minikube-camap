@@ -1,0 +1,201 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "camap.fullname" . }}-web
+  labels:
+    {{- include "camap.labels" . | nindent 4 }}
+
+spec:
+  {{- if not .Values.autoscaling.web.enabled }}
+  replicas: {{ .Values.web.replicaCount }}
+  {{- end }}
+
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "camap.name" . }}
+      app.kubernetes.io/component: web
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "camap.name" . }}
+        app.kubernetes.io/component: web
+      annotations:
+        reloader.stakater.com/auto: "true"      
+
+    spec:
+      terminationGracePeriodSeconds: 90    
+      {{- with .Values.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      initContainers:
+        - name: render-config
+          image: alpine:3.20
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              apk add --no-cache gettext
+              mkdir -p /work
+              envsubst < /templates/camapts.env.tpl > /work/camapts.env
+              envsubst < /templates/camaphx-config.xml.tpl > /work/config.xml
+
+          env:
+            - name: DB_HOST
+              value: {{ .Values.camapConfig.dbHost | quote }}
+
+            - name: DB_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mysql.existingSecret }}
+                  key: mysql-database
+
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mysql.existingSecret }}
+                  key: mysql-username
+
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mysql.existingSecret }}
+                  key: mysql-password
+
+            - name: MYSQL_HOST
+              value: {{ .Values.camapConfig.dbHost | quote }}
+
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mysql.existingSecret }}
+                  key: mysql-database
+
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mysql.existingSecret }}
+                  key: mysql-username
+
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mysql.existingSecret }}
+                  key: mysql-password
+
+            - name: CAMAP_HOSTNAME
+              value: {{ .Values.camapConfig.hostname | quote }}
+
+            - name: CAMAP_INSTANCE_NAME
+              value: {{ .Values.camapConfig.instanceName | quote }}
+
+            - name: WEBMASTER_EMAIL
+              value: {{ .Values.camapConfig.webmasterEmail | quote }}
+
+            - name: CAMAP_DEBUG
+              value: {{ .Values.camapConfig.debug | quote }}
+
+            - name: CAMAP_CACHE
+              value: {{ .Values.camapConfig.cache | quote }}
+
+            - name: CAMAP_API_URL
+              value: {{ .Values.camapConfig.camapApiUrl | quote }}
+
+            - name: CAMAP_BRIDGE_API_INTERNAL
+              value: {{ .Values.camapConfig.camapBridgeApiInternal | quote }}
+
+            - name: MAPBOX_KEY
+              value: {{ .Values.camapConfig.mapboxKey | quote }}
+
+          envFrom:
+            - secretRef:
+                name: {{ .Values.runtimeSecrets.existingSecret }}
+
+          volumeMounts:
+            - name: templates
+              mountPath: /templates
+            - name: rendered
+              mountPath: /work
+
+      containers:
+        - name: web
+          image: "{{ .Values.image.web.repository }}:{{ .Values.image.web.tag }}"
+          imagePullPolicy: {{ .Values.image.web.pullPolicy }}
+
+          env:
+            - name: TZ
+              value: "Europe/Paris"
+
+          ports:
+            - containerPort: 80
+              name: http
+
+          startupProbe:
+            httpGet:
+              path: /ping
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          volumeMounts:
+            - name: rendered
+              mountPath: /srv/config.xml
+              subPath: config.xml
+
+            - name: rendered
+              mountPath: /srv/camapts.env
+              subPath: camapts.env
+
+            {{- if .Values.web.apacheOverlay.enabled }}
+            - name: apache-overlay
+              mountPath: /etc/apache2/conf-available/camap-static.conf
+              subPath: camap-static.conf
+            {{- end }}
+
+          resources:
+            {{- toYaml .Values.resources.web | nindent 12 }}
+
+      volumes:
+        - name: templates
+          configMap:
+            name: {{ include "camap.fullname" . }}-config
+            items:
+              - key: camapts.env.tpl
+                path: camapts.env.tpl
+              - key: camaphx-config.xml.tpl
+                path: camaphx-config.xml.tpl
+
+        - name: rendered
+          emptyDir: {}
+
+        {{- if .Values.web.apacheOverlay.enabled }}
+        - name: apache-overlay
+          configMap:
+            name: {{ include "camap.fullname" . }}-apache-overlay
+        {{- end }}

@@ -1,0 +1,42 @@
+{{- if and .Values.ingress.enabled .Values.ingress.web.enabled .Values.ingress.web.security.blockInstall }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "camap.fullname" . }}-block
+  labels:
+    {{- include "camap.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "camap.fullname" . }}-web-block-install
+  labels:
+    {{- include "camap.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/ingress.class: {{ .Values.ingress.className | quote }}
+    nginx.ingress.kubernetes.io/ssl-redirect: {{ .Values.ingress.web.tls.enabled | toString | quote }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  {{- if .Values.ingress.web.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.web.host }}
+      secretName: {{ include "camap.tlsSecretNameWeb" . }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.web.host }}
+      http:
+        paths:
+          - path: /install
+            pathType: Exact
+            backend:
+              service:
+                name: {{ include "camap.fullname" . }}-block
+                port:
+                  number: 80
+{{- end }}

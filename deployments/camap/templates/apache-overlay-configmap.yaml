@@ -1,0 +1,15 @@
+{{- if .Values.web.apacheOverlay.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "camap.fullname" . }}-apache-overlay
+  labels:
+    app.kubernetes.io/name: {{ include "camap.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: web
+data:
+  camap-static.conf: |
+{{- with .Values.web.apacheOverlay.camapStaticConf }}
+{{- . | nindent 4 }}
+{{- end }}
+{{- end }}

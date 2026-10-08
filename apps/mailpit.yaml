@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mailpit
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+  labels:
+    app.kubernetes.io/name: mailpit
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/CAMAP-APP/minikube-camap.git    # <= MODIFIER POUR POINTER VERS VOTRE REPO
+    targetRevision: refs/heads/main
+    path: deployments/mailpit
+    helm:
+      releaseName: mailpit
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mailpit
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
