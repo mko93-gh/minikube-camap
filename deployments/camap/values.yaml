@@ -1,11 +1,11 @@
 image:
   api:
-    repository: ghcr.io/camap-app/camap-ts
+    repository: mko.gh/camap-ts
     tag: "latest"
     pullPolicy: IfNotPresent
 
   web:
-    repository: ghcr.io/camap-app/camap-hx
+    repository: mko.gh/camap-hx
     tag: "latest"
     pullPolicy: IfNotPresent
 
